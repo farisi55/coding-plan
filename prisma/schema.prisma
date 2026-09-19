@@ -1,0 +1,108 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NOTE: SQLite/D1 has no native enum type in Prisma — these are plain
+// String columns now. Valid values are enforced at the application layer
+// (zod) instead of the database layer. Keep the comments as the source of
+// truth for allowed values.
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  plan          String    @default("FREE") // FREE | STARTER | PRO
+  // monthly generation quota tracking (used to enforce FREE plan limits later)
+  generationsThisMonth Int      @default(0)
+  quotaResetAt         DateTime @default(now())
+  // Drives the 3-month inactive-account retention policy (PRD §4.5) — update
+  // this on login/session refresh. No cleanup job reads it yet; that's a
+  // documented next step, not implemented.
+  lastActiveAt         DateTime @default(now())
+
+  accounts      Account[]
+  sessions      Session[]
+  projects      Project[]
+  cliTokens     CliToken[]
+  createdAt     DateTime  @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  idea      String
+  status    String   @default("DRAFT") // DRAFT | GENERATING | DONE | FAILED
+  prds      Prd[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Prd {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  modelUsed   String   // e.g. "meta-llama/llama-3.3-70b-instruct:free"
+  // Structured tree: { title, overview, features: [{ id, name, phase, status, subFeatures: [{ id, name, description }] }] }
+  content     Json
+  tokensUsed  Int?
+  createdAt   DateTime @default(now())
+}
+
+// Added per PRD §4.5/§4.4: CLI auth is OAuth browser-based with a one-time
+// callback token the user copy-pastes into the terminal. We store only the
+// hash — never the plaintext token — so a leaked DB dump doesn't hand out
+// working CLI credentials, and revocation is a single UPDATE.
+model CliToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+}

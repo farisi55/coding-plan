@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prd-generator",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prd-generator-db",
+      "database_id": "REPLACE_WITH_REAL_ID_AFTER_wrangler_d1_create"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
