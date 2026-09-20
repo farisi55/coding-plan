@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Blocks any commit that stages a real .env file. .env.example is allowed —
+# it's the template, not a secret. Matches .env, .env.local, .env.production,
+# etc. but not .env.example or files that merely contain "env" in the name.
+staged_env_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)\.env(\.[^.]+)?$' | grep -v '\.env\.example$')
+
+if [ -n "$staged_env_files" ]; then
+  echo "pre-commit: blocked — staged .env file(s) detected:"
+  echo "$staged_env_files" | sed 's/^/  /'
+  echo "Remove them from the commit (git restore --staged <file>) or add to .gitignore if untracked."
+  exit 1
+fi
+
+exit 0
