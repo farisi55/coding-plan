@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
+import type { ApiResponse } from "@coding-plan/shared";
 
 /**
  * Standard envelope for every API route: { data, error }, never both populated.
  * error.code is machine-readable (UPPER_SNAKE_CASE) so clients (including the
  * future CLI) can branch on it without string-matching error.message.
+ * The ApiError/ApiResponse types themselves live in @coding-plan/shared —
+ * apiOk/apiError below are just the Next.js-specific helpers that produce them.
  */
-export type ApiError = { code: string; message: string; details?: unknown };
-export type ApiResponse<T> = { data: T; error: null } | { data: null; error: ApiError };
 
 export function apiOk<T>(data: T, init?: number): NextResponse<ApiResponse<T>> {
   return NextResponse.json({ data, error: null }, { status: init ?? 200 });

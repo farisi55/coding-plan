@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PrdContent } from "@coding-plan/shared";
 
 /**
  * Thin wrapper over OpenRouter's chat completions endpoint.
@@ -54,19 +55,9 @@ const prdModelSchema = z.object({
   features: z.array(featureModelSchema).min(1).max(10),
 });
 
-export type SubFeature = { id: string; name: string; description: string };
-export type Feature = {
-  id: string;
-  name: string;
-  phase: number;
-  status: "planned";
-  subFeatures: SubFeature[];
-};
-export type PrdContent = {
-  title: string;
-  overview: string;
-  features: Feature[];
-};
+// SubFeature, Feature, PrdContent now come from @coding-plan/shared (imported
+// above) — this is the shared API contract with the future CLI, so it lives
+// in one place instead of being redefined (and risking drift) per consumer.
 
 export function slugify(text: string): string {
   return text
@@ -140,7 +131,15 @@ export async function generatePrd(idea: string, modelId: string): Promise<{ cont
     throw new Error(`OpenRouter error (${response.status}): ${errText}`);
   }
 
-  const data = await response.json();
+  // Minimal shape of OpenRouter's (OpenAI-compatible) chat completion response —
+  // just the fields we actually read. Not part of @coding-plan/shared: this is
+  // OpenRouter's contract with us, not ours with the CLI.
+  type OpenRouterResponse = {
+    choices?: { message?: { content?: string } }[];
+    usage?: { total_tokens?: number };
+  };
+
+  const data = (await response.json()) as OpenRouterResponse;
   const rawContent: string = data.choices?.[0]?.message?.content ?? "";
   const tokensUsed: number = data.usage?.total_tokens ?? 0;
 

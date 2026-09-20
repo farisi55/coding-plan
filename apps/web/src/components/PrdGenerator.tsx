@@ -1,22 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import type { Feature, PrdContent, ApiResponse } from "@coding-plan/shared";
 
 type ModelOption = { id: string; label: string };
 
-type SubFeature = { id: string; name: string; description: string };
-type Feature = {
-  id: string;
-  name: string;
-  phase: number;
-  status: "planned";
-  subFeatures: SubFeature[];
-};
-type PrdContent = {
-  title: string;
-  overview: string;
-  features: Feature[];
-};
+// Feature/PrdContent (and its nested SubFeature) come from @coding-plan/shared
+// now — this file used to define its own copy, silently disconnected from
+// the actual shape openrouter.ts produces. That drift is exactly what the
+// shared package exists to prevent.
 
 const STATUS_LABEL: Record<Feature["status"], string> = {
   planned: "Direncanakan",
@@ -42,13 +34,13 @@ export default function PrdGenerator({ models }: { models: ModelOption[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, idea, modelId }),
       });
-      const body = await res.json();
+      const body = (await res.json()) as ApiResponse<{ projectId: string; prd: { content: PrdContent } }>;
 
       if (!res.ok || body.error) {
         throw new Error(body.error?.message ?? "Gagal generate PRD.");
       }
 
-      setResult(body.data.prd.content as PrdContent);
+      setResult(body.data.prd.content);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan tak terduga.");
     } finally {

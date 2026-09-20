@@ -1,6 +1,6 @@
 ---
 project: coding-plan
-version: 1.0.1
+version: 1.0.2
 source: prd
 last_updated: 2026-09-18
 project_shape: fullstack
@@ -18,9 +18,9 @@ external_assets: false
 
 ## 2. Tech Stack
 - **Language:** TypeScript 5.x, runtime Node.js via Cloudflare Workers `nodejs_compat`
-- **Framework:** Next.js 15, App Router
+- **Framework:** Next.js 15.5.25, App Router (bumped from 15.1.6 — `@opennextjs/cloudflare@1.x` requires `>=15.5.24`)
 - **Database:** Cloudflare D1 (SQLite) via Prisma `@prisma/adapter-d1` (`previewFeatures = ["driverAdapters"]`)
-- **Infrastructure:** Cloudflare Workers via `@opennextjs/cloudflare`
+- **Infrastructure:** Cloudflare Workers via `@opennextjs/cloudflare@^1.0.0` (bumped from a broken `^0.6.0` pin — see Task #001 Notes) + `wrangler@^4.125.0` (bumped from `^3.99.0`, required peer dependency)
 - **Container orchestration:** none
 - **Key third-party services:** OpenRouter (AI gateway, model `:free`), Cloudflare Vectorize + Workers AI (RAG Workspace Agent chat — belum diimplementasi), Resend (email, HTTP API), Xendit (payment gateway — belum diimplementasi)
 - **Webhook providers:** Xendit (konfirmasi pembayaran) — belum diimplementasi
@@ -29,17 +29,25 @@ external_assets: false
 - **Pattern:** Serverless (Cloudflare Workers) + Next.js App Router — route handlers sebagai API layer, server components untuk SSR
 - **Folder/module structure:**
   ```
-  coding-plan/
-  ├── .husky/pre-commit          # git core.hooksPath — blocks staged .env files
-  ├── prisma/schema.prisma
-  ├── src/
-  │   ├── app/
-  │   │   ├── api/{auth/[...nextauth],generate}/route.ts
-  │   │   ├── layout.tsx, page.tsx, globals.css
-  │   ├── components/PrdGenerator.tsx
-  │   └── lib/{auth,db,openrouter,api-response}.ts
-  ├── wrangler.jsonc, open-next.config.ts, next.config.mjs
+  coding-plan/                    # npm workspaces monorepo root
+  ├── developer-brief-web-app.md, developer-brief-cli-tool.md
+  ├── apps/web/                    # this unit — everything below is inside it
+  │   ├── .husky/pre-commit → moved to repo root, applies to all workspaces
+  │   ├── prisma/schema.prisma
+  │   ├── src/
+  │   │   ├── app/
+  │   │   │   ├── api/{auth/[...nextauth],generate}/route.ts
+  │   │   │   ├── layout.tsx, page.tsx, globals.css
+  │   │   ├── components/PrdGenerator.tsx
+  │   │   └── lib/{auth,db,openrouter,api-response}.ts
+  │   ├── cloudflare-env.d.ts      # bridges wrangler's generated Env into CloudflareEnv
+  │   ├── wrangler.jsonc, open-next.config.ts, next.config.mjs
+  │   └── prd.md, knowledge.md, changelog.md   # this unit's own planning docs
+  └── packages/
+      ├── shared/src/index.ts      # ApiError/ApiResponse/PrdContent/Feature/SubFeature — the actual web↔CLI contract
+      └── cli/                     # not yet implemented — see developer-brief-cli-tool.md
   ```
+  Monorepo decided over separate repos (2026-09-20): shared TypeScript contract with the future CLI outweighs the overhead of two repos for a solo developer. `.gitignore`/`.husky/` live at the workspace root, not inside `apps/web`, since git hooks are repo-wide regardless of which workspace changed.
 - **Design patterns:** Zod validation di API boundary; per-request resource factory (`getDb()`, `getAuthOptions()`) — bukan singleton Node tradisional
 - **Data flow:** client → Next.js Route Handler → validasi zod → Prisma (D1) / OpenRouter → response JSON (`{ data, error }` envelope)
 - **Key architectural decisions:**
@@ -48,6 +56,7 @@ external_assets: false
   3. Model AI `:free` dipilih di atas model premium untuk MVP — target biaya inference $0; trade-off: kualitas lebih rendah, rate limit 50 request/hari
   4. Output PRD terstruktur (JSON Fase→Fitur→Sub-fitur) dipilih di atas markdown freeform — lebih actionable buat AI coding agent
   5. Resend (HTTP API) dipilih di atas SMTP — Cloudflare Workers memblokir outbound SMTP port 25/587 by default
+  6. Monorepo (npm workspaces: apps/web + packages/shared + packages/cli) dipilih di atas 2 repo terpisah — shared TypeScript contract (response envelope, PRD structure) dengan CLI di masa depan mengalahkan overhead 2-repo buat solo developer; per-unit `prd.md`/`knowledge.md`/`changelog.md` tetap terpisah (Appendix I tetap berlaku di level dokumen, cuma tooling/repo-nya yang digabung)
 
 ## 4. Code Standards
 - **Naming:** file kebab-case, function camelCase, class/type PascalCase

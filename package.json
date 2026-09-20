@@ -1,54 +1,16 @@
 {
-  "name": "prd-generator-saas",
-  "version": "0.2.0",
+  "name": "coding-plan",
+  "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "wrangler d1 migrations apply prd-generator-db --local",
-    "prisma:migrate:remote": "wrangler d1 migrations apply prd-generator-db --remote",
-    "prisma:studio": "prisma studio",
-    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "cf:typegen": "wrangler types"
-  },
-  "dependencies": {
-    "@next-auth/prisma-adapter": "^1.0.7",
-    "@prisma/adapter-d1": "^5.20.0",
-    "@prisma/client": "^5.20.0",
-    "next": "15.1.6",
-    "next-auth": "^4.24.8",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "resend": "^4.0.1",
-    "zod": "^3.23.8"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250109.0",
-    "@eslint/eslintrc": "^3.2.0",
-    "@opennextjs/cloudflare": "^0.6.0",
-    "@types/node": "^20.14.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitest/coverage-v8": "^2.1.8",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^9.18.0",
-    "eslint-config-next": "15.1.6",
-    "eslint-config-prettier": "^9.1.0",
-    "postcss": "^8.4.47",
-    "prettier": "^3.4.2",
-    "prisma": "^5.20.0",
-    "tailwindcss": "^3.4.13",
-    "typescript": "^5.6.2",
-    "vitest": "^2.1.8",
-    "wrangler": "^3.99.0"
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web",
+    "format": "npm run format --workspace=apps/web",
+    "test": "npm run test --workspace=apps/web"
   }
 }

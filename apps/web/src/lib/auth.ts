@@ -10,7 +10,12 @@ import { getDb } from "./db";
 // not something specific to us. Resend's HTTP API sidesteps that entirely,
 // and its free tier (3,000 emails/month, 100/day) comfortably covers
 // magic-link volume at MVP scale.
-const resend = new Resend(process.env.RESEND_API_KEY);
+//
+// Constructed lazily (inside sendVerificationRequest below), NOT at module
+// load time. Next.js's build step imports this module to collect page data
+// with no runtime secrets available — the Resend SDK throws immediately if
+// its constructor gets an empty key, which broke `next build` entirely until
+// this was made lazy. Runtime is the only place RESEND_API_KEY needs to exist.
 
 /**
  * Returns a fresh NextAuthOptions object built with a live, request-scoped
@@ -31,6 +36,7 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
       EmailProvider({
         from: process.env.EMAIL_FROM,
         sendVerificationRequest: async ({ identifier: email, url }) => {
+          const resend = new Resend(process.env.RESEND_API_KEY);
           const { error } = await resend.emails.send({
             from: process.env.EMAIL_FROM as string,
             to: email,

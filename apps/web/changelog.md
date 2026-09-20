@@ -1,7 +1,7 @@
 ---
 project: coding-plan
-knowledge_version: 1.0.1
-changelog_version: 1.0.1
+knowledge_version: 1.0.2
+changelog_version: 1.0.2
 created: 2026-09-18
 status: in_progress
 milestone: 1 of 2
@@ -51,10 +51,10 @@ than silently dropped:
 
 ### Task #003 — CI Pipeline (lint → type-check → test → security-scan)
 - **Phase:** Foundation
-- **Scope:** GitHub Actions workflow running lint, typecheck, test, and a dependency security scan on every push
-- **Files to create / modify:** `.github/workflows/ci.yml` (new)
+- **Scope:** GitHub Actions workflow running lint, typecheck, test, and a dependency security scan on every push. Repo is now an npm workspaces monorepo (see Task #001 follow-up restructure) — commands run at root with `--workspace=apps/web` or `npm run <script> -w apps/web`, not bare `npm run lint`
+- **Files to create / modify:** `.github/workflows/ci.yml` (new, at repo root — GitHub Actions always discovers workflows there regardless of workspace layout)
 - **Acceptance criteria:**
-  - [ ] Workflow runs `npm run lint`, `tsc --noEmit`, `npm run test`, and `npm audit --audit-level=high` in sequence
+  - [ ] Workflow runs lint/typecheck/test/audit scoped to `apps/web` (the only workspace with real code so far) in sequence
   - [ ] A PR with an intentionally broken lint rule fails the workflow
 - **Dependencies:** Task #001, #002
 - **Decisions made:** (fill after execution — never leave blank)
@@ -62,7 +62,7 @@ than silently dropped:
 ### Task #004 — Structured Logging & Error Tracking Init
 - **Phase:** Foundation
 - **Scope:** Initialize Sentry with PII/secret scrubbing enabled before any event is sent
-- **Files to create / modify:** `src/lib/sentry.ts` (new), `next.config.mjs` (modify), `wrangler.jsonc` (add env var)
+- **Files to create / modify:** `apps/web/src/lib/sentry.ts` (new), `apps/web/next.config.mjs` (modify), `apps/web/wrangler.jsonc` (add env var)
 - **Acceptance criteria:**
   - [ ] Sentry captures an intentionally thrown test error in a non-prod environment
   - [ ] A test event containing a fake email/token in its payload is scrubbed before send (unit-tested via the `beforeSend` hook)
@@ -72,7 +72,7 @@ than silently dropped:
 ### Task #005 — Health Check Endpoint
 - **Phase:** Foundation
 - **Scope:** Add `GET /api/health` returning status, D1 connectivity, and app version
-- **Files to create / modify:** `src/app/api/health/route.ts` (new)
+- **Files to create / modify:** `apps/web/src/app/api/health/route.ts` (new)
 - **Acceptance criteria:**
   - [ ] Returns 200 with `{ status: "ok", db: "ok", version }` when D1 is reachable
   - [ ] Returns 503 with `db: "error"` when the internal D1 check query fails
@@ -82,7 +82,7 @@ than silently dropped:
 ### Task #006 — Startup Env Var Validation
 - **Phase:** Foundation
 - **Scope:** Validate required env vars with zod at first use; fail fast with a clear error instead of a cryptic downstream crash
-- **Files to create / modify:** `src/lib/env.ts` (new), `src/lib/auth.ts` (modify), `src/lib/openrouter.ts` (modify)
+- **Files to create / modify:** `apps/web/src/lib/env.ts` (new), `apps/web/src/lib/auth.ts` (modify), `apps/web/src/lib/openrouter.ts` (modify)
 - **Acceptance criteria:**
   - [ ] A missing `OPENROUTER_API_KEY` produces a clear `EnvValidationError`, not a raw fetch failure
   - [ ] Unit test written and passing for new logic
@@ -95,7 +95,7 @@ than silently dropped:
 ### Task #007 — Apply & Verify Initial D1 Migration
 - **Phase:** Domain & Data
 - **Scope:** Generate and apply the first D1 migration for all 7 entities (User, Account, Session, VerificationToken, Project, Prd, CliToken)
-- **Files to create / modify:** `migrations/0001_init.sql` (new)
+- **Files to create / modify:** `apps/web/migrations/0001_init.sql` (new)
 - **Acceptance criteria:**
   - [ ] `npm run prisma:migrate` applies cleanly to a fresh local D1 instance with zero errors
   - [ ] `PRAGMA table_info(...)` output for every table matches knowledge.md §7 exactly (columns, types, nullability, defaults)
@@ -111,7 +111,7 @@ than silently dropped:
 ### Task #008 — Inactive-Account Retention Job
 - **Phase:** Domain & Data
 - **Scope:** Cloudflare Cron Trigger — 30-day warning email at 60 days inactive, hard-delete at 90 days inactive, per knowledge.md §7
-- **Files to create / modify:** `src/cron/retention.ts` (new), `wrangler.jsonc` (add `[triggers]` block)
+- **Files to create / modify:** `apps/web/src/cron/retention.ts` (new), `apps/web/wrangler.jsonc` (add `[triggers]` block)
 - **Acceptance criteria:**
   - [ ] A user with `lastActiveAt` 61 days ago receives exactly one warning email and is not deleted
   - [ ] A user with `lastActiveAt` 91 days ago is hard-deleted (Project/Prd/Account/Session/CliToken all cascade)
@@ -124,7 +124,7 @@ than silently dropped:
 ### Task #009 — Unit Tests: PRD Generation & Validation Logic
 - **Phase:** Core Features
 - **Scope:** Test `generatePrd()`'s JSON extraction, zod validation, and error paths (`slugify` already covered)
-- **Files to create / modify:** `src/lib/openrouter.test.ts` (extend)
+- **Files to create / modify:** `apps/web/src/lib/openrouter.test.ts` (extend)
 - **Acceptance criteria:**
   - [ ] Valid JSON, fenced-JSON, and malformed-JSON responses each produce the expected result/error
   - [ ] Unit test written and passing for new logic
@@ -135,7 +135,7 @@ than silently dropped:
 ### Task #010 — Unit Tests: Auth Session & Quota Logic
 - **Phase:** Core Features
 - **Scope:** Test the session callback in `getAuthOptions()` and the month-rollover quota-reset logic in `/api/generate`
-- **Files to create / modify:** `src/lib/auth.test.ts` (new), `src/app/api/generate/route.test.ts` (new)
+- **Files to create / modify:** `apps/web/src/lib/auth.test.ts` (new), `apps/web/src/app/api/generate/route.test.ts` (new)
 - **Acceptance criteria:**
   - [ ] Session callback attaches `id` and `plan` to `session.user` correctly
   - [ ] Quota resets to 0 only when `now > quotaResetAt`, never otherwise
@@ -147,7 +147,7 @@ than silently dropped:
 ### Task #011 — CLI Auth: Start Endpoint (OAuth Kickoff)
 - **Phase:** Core Features
 - **Scope:** `GET /api/cli-auth/start` begins the browser-based OAuth flow for CLI login, reusing the existing Google provider
-- **Files to create / modify:** `src/app/api/cli-auth/start/route.ts` (new)
+- **Files to create / modify:** `apps/web/src/app/api/cli-auth/start/route.ts` (new)
 - **Acceptance criteria:**
   - [ ] Visiting the endpoint redirects to Google OAuth consent with a `state` param bound to the request
   - [ ] Unit test written and passing for state generation/validation
@@ -158,7 +158,7 @@ than silently dropped:
 ### Task #012 — CLI Auth: Callback & One-Time Token Issuance
 - **Phase:** Core Features
 - **Scope:** OAuth callback creates/looks up the User, issues a one-time CLI token, stores its hash, shows a copy-paste page
-- **Files to create / modify:** `src/app/api/cli-auth/callback/route.ts` (new), `src/app/cli-auth/success/page.tsx` (new)
+- **Files to create / modify:** `apps/web/src/app/api/cli-auth/callback/route.ts` (new), `apps/web/src/app/cli-auth/success/page.tsx` (new)
 - **Acceptance criteria:**
   - [ ] A successful callback creates exactly one `CliToken` row (hash only, never plaintext) and shows the plaintext token exactly once
   - [ ] A `state` that doesn't match an in-flight request is rejected (CSRF protection)
@@ -172,7 +172,7 @@ than silently dropped:
 ### Task #013 — OpenRouter Call: Timeout & Circuit Breaker
 - **Phase:** Integration
 - **Scope:** Wrap the OpenRouter fetch with a request timeout and a circuit breaker (required — `simple_mode: false`)
-- **Files to create / modify:** `src/lib/openrouter.ts` (modify), `src/lib/circuit-breaker.ts` (new)
+- **Files to create / modify:** `apps/web/src/lib/openrouter.ts` (modify), `apps/web/src/lib/circuit-breaker.ts` (new)
 - **Acceptance criteria:**
   - [ ] A request exceeding 30s aborts with a clear timeout error instead of hanging
   - [ ] After 5 consecutive failures the circuit opens (fails fast, no network call) for a cooldown window, then half-opens to test recovery
@@ -182,7 +182,7 @@ than silently dropped:
 ### Task #014 — Resend Call: Timeout Handling
 - **Phase:** Integration
 - **Scope:** Add a request timeout to the Resend send call so a slow API doesn't block magic-link login indefinitely
-- **Files to create / modify:** `src/lib/auth.ts` (modify)
+- **Files to create / modify:** `apps/web/src/lib/auth.ts` (modify)
 - **Acceptance criteria:**
   - [ ] A call exceeding 10s aborts and surfaces a clear "couldn't send login email" error
   - [ ] Existing successful-send path is unaffected (regression-checked)
@@ -194,7 +194,7 @@ than silently dropped:
 ### Task #015 — Verify XSS Safety of AI-Generated Content Rendering
 - **Phase:** UI/UX
 - **Scope:** Audit that AI-generated PRD content (names, descriptions, overview) can never execute as HTML/script in `PrdGenerator.tsx`
-- **Files to create / modify:** `src/components/PrdGenerator.tsx` (audit; no functional change expected)
+- **Files to create / modify:** `apps/web/src/components/PrdGenerator.tsx` (audit; no functional change expected)
 - **Acceptance criteria:**
   - [ ] Codebase contains zero uses of `dangerouslySetInnerHTML` for AI-generated content
   - [ ] A PRD generated from an idea containing `<script>alert(1)</script>`-style text renders as literal visible text, documented and verified
@@ -203,22 +203,22 @@ than silently dropped:
 
 ### Phase 6 — Testing & QA
 
-### Task #016 — Coverage: `src/lib/*` Modules to 80%
+### Task #016 — Coverage: `apps/web/src/lib/*` Modules to 80%
 - **Phase:** Testing & QA
 - **Scope:** Close coverage gaps in `auth.ts`, `db.ts`, `openrouter.ts`, `api-response.ts` to meet the >80% target (knowledge.md §4)
 - **Files to create / modify:** existing `*.test.ts` files (extend/add)
 - **Acceptance criteria:**
-  - [ ] `npm run test:coverage` reports ≥80% lines/functions/branches/statements for everything under `src/lib/`
+  - [ ] `npm run test:coverage` reports ≥80% lines/functions/branches/statements for everything under `apps/web/src/lib/`
   - [ ] No test makes a live network call (OpenRouter/Resend mocked)
 - **Dependencies:** Task #009, #010, #013, #014
 - **Decisions made:** (fill after execution — never leave blank)
 
 ### Task #017 — Coverage: API Routes & Components to 80%
 - **Phase:** Testing & QA
-- **Scope:** Close coverage gaps in `src/app/api/*/route.ts` and `PrdGenerator.tsx` to meet the >80% target overall
-- **Files to create / modify:** `src/app/api/generate/route.test.ts` (extend), `src/components/PrdGenerator.test.tsx` (new)
+- **Scope:** Close coverage gaps in `apps/web/src/app/api/*/route.ts` and `PrdGenerator.tsx` to meet the >80% target overall
+- **Files to create / modify:** `apps/web/src/app/api/generate/route.test.ts` (extend), `apps/web/src/components/PrdGenerator.test.tsx` (new)
 - **Acceptance criteria:**
-  - [ ] `npm run test:coverage` reports ≥80% across the full `src/` tree
+  - [ ] `npm run test:coverage` reports ≥80% across the full `apps/web/src/` tree
   - [ ] Coverage report visible in CI output
 - **Dependencies:** Task #016, #003
 - **Decisions made:** (fill after execution — never leave blank)
@@ -228,7 +228,7 @@ than silently dropped:
 ### Task #018 — Version Tagging & Rollback Procedure
 - **Phase:** Deployment
 - **Scope:** Establish the git tag format and a tested rollback procedure
-- **Files to create / modify:** `docs/deployment.md` (new)
+- **Files to create / modify:** `apps/web/docs/deployment.md` (new)
 - **Acceptance criteria:**
   - [ ] A git tag in the documented format (e.g. `v0.2.0`) exists for the current state
   - [ ] Redeploying the previous tag to staging completes in under 10 minutes, verified once
@@ -238,7 +238,7 @@ than silently dropped:
 ### Task #019 — Staging Deploy, Smoke Test & Env Var Verification
 - **Phase:** Deployment
 - **Scope:** Deploy to Cloudflare Workers staging, confirm required env vars, smoke-test the idea-to-PRD flow end-to-end
-- **Files to create / modify:** `wrangler.jsonc` (add staging environment), `docs/deployment.md` (extend)
+- **Files to create / modify:** `apps/web/wrangler.jsonc` (add staging environment), `apps/web/docs/deployment.md` (extend)
 - **Acceptance criteria:**
   - [ ] All 9 required env vars (knowledge.md §8) confirmed present in staging
   - [ ] A full login → generate PRD → view result flow succeeds in staging with zero errors
@@ -249,7 +249,7 @@ than silently dropped:
 ### Task #020 — Load Test: Smoke & Capacity Stages
 - **Phase:** Deployment
 - **Scope:** Run both required load-test stages against staging (`simple_mode: false` — Stage 2 is not skipped)
-- **Files to create / modify:** `load-test/k6-script.js` (new), `docs/deployment.md` (append results)
+- **Files to create / modify:** `apps/web/load-test/k6-script.js` (new), `apps/web/docs/deployment.md` (append results)
 - **Acceptance criteria:**
   - [ ] Stage 1 (Smoke: 10 VU / 60s) completes with zero 5xx errors
   - [ ] Stage 2 (Capacity: 50 VU minimum, 2 min) completes with P95/P99/error-rate recorded, memory at end ≤120% of start, zero 5xx during a mid-test deploy
@@ -259,7 +259,7 @@ than silently dropped:
 ### Task #021 — Backup Restore Test (D1 Time Travel)
 - **Phase:** Deployment
 - **Scope:** Verify D1 Time Travel restore works — restore staging to 10+ minutes in the past and confirm data integrity
-- **Files to create / modify:** `docs/deployment.md` (append restore runbook)
+- **Files to create / modify:** `apps/web/docs/deployment.md` (append restore runbook)
 - **Acceptance criteria:**
   - [ ] `wrangler d1 time-travel restore` successfully restores staging D1 to a prior timestamp
   - [ ] Post-restore row counts for User/Project/Prd match the expected pre-restore state
@@ -268,8 +268,8 @@ than silently dropped:
 
 ### Task #022 — API Documentation
 - **Phase:** Deployment
-- **Scope:** Generate `docs/api.yaml` (OpenAPI) covering `/api/generate`, `/api/health`, `/api/cli-auth/*`, verified against the running staging server
-- **Files to create / modify:** `docs/api.yaml` (new)
+- **Scope:** Generate `apps/web/docs/api.yaml` (OpenAPI) covering `/api/generate`, `/api/health`, `/api/cli-auth/*`, verified against the running staging server
+- **Files to create / modify:** `apps/web/docs/api.yaml` (new)
 - **Acceptance criteria:**
   - [ ] Every route implemented as of this milestone has an OpenAPI entry matching the `{ data, error }` envelope
   - [ ] `swagger-cli validate` (or equivalent) passes with zero errors

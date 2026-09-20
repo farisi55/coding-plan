@@ -16,6 +16,11 @@ node_modules/
 .wrangler/
 dist/
 
+# Generated — regenerate with `next dev`/`build` and `npm run cf:typegen`
+next-env.d.ts
+worker-configuration.d.ts
+*.tsbuildinfo
+
 # Test coverage
 coverage/
 
