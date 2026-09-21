@@ -1,6 +1,6 @@
 ---
 doc_id: PRD-CODING-PLAN-001
-version: 1.2.1
+version: 1.3.0
 status: draft
 created: 2026-09-16
 flow_compatibility: vibe-coding-v1.7
@@ -51,7 +51,7 @@ project_shape: fullstack
 
 ### 4.1 Tech Stack
 - **Language & Runtime:** TypeScript 5.x / Node.js (via Cloudflare Workers `nodejs_compat`)
-- **Framework:** Next.js 15, App Router
+- **Framework:** Next.js 15.5.25, App Router (versi presisi dikonfirmasi saat setup Cloudflare — `@opennextjs/cloudflare@1.x` butuh minimal 15.5.24)
 - **Database:** Cloudflare D1 (SQLite) via Prisma `@prisma/adapter-d1`
 - **ORM / Query builder:** Prisma 5.x (`previewFeatures = ["driverAdapters"]`)
 - **Cache:** none `[ASSUMED — belum dibutuhkan di skala MVP]`
@@ -65,28 +65,32 @@ project_shape: fullstack
 - **Pattern:** Serverless (Cloudflare Workers) + Next.js App Router — route handlers sebagai API layer, server components untuk SSR
 - **Module structure:**
   ```
-  coding-plan/
-  ├── prisma/
-  │   └── schema.prisma
-  ├── src/
-  │   ├── app/
-  │   │   ├── api/
-  │   │   │   ├── auth/[...nextauth]/route.ts
-  │   │   │   └── generate/route.ts
-  │   │   ├── layout.tsx
-  │   │   ├── page.tsx
-  │   │   └── globals.css
-  │   ├── components/
-  │   │   └── PrdGenerator.tsx
-  │   └── lib/
-  │       ├── auth.ts       # getAuthOptions() — dibangun per-request
-  │       ├── db.ts         # getDb() — Prisma client per-request, D1-bound
-  │       └── openrouter.ts # generatePrd(), SUPPORTED_MODELS
-  ├── wrangler.jsonc
-  ├── open-next.config.ts
-  ├── next.config.mjs
-  └── package.json
+  coding-plan/                    # npm workspaces monorepo root
+  ├── developer-brief-web-app.md, developer-brief-cli-tool.md
+  ├── apps/web/                    # this PRD's unit — everything below is inside it
+  │   ├── prisma/schema.prisma
+  │   ├── src/
+  │   │   ├── app/
+  │   │   │   ├── api/
+  │   │   │   │   ├── auth/[...nextauth]/route.ts
+  │   │   │   │   └── generate/route.ts
+  │   │   │   ├── layout.tsx
+  │   │   │   ├── page.tsx
+  │   │   │   └── globals.css
+  │   │   ├── components/
+  │   │   │   └── PrdGenerator.tsx
+  │   │   └── lib/
+  │   │       ├── auth.ts       # getAuthOptions() — dibangun per-request
+  │   │       ├── db.ts         # getDb() — Prisma client per-request, D1-bound
+  │   │       └── openrouter.ts # generatePrd(), SUPPORTED_MODELS
+  │   ├── cloudflare-env.d.ts    # bridges wrangler's generated Env ke CloudflareEnv
+  │   ├── wrangler.jsonc, open-next.config.ts, next.config.mjs, package.json
+  │   └── prd.md, knowledge.md, changelog.md   # dokumen ini
+  └── packages/
+      ├── shared/src/index.ts    # ApiError/ApiResponse/PrdContent/Feature/SubFeature
+      └── cli/                   # belum diimplementasi
   ```
+  `.gitignore`/`.husky/` ada di root monorepo (git hook berlaku semua workspace), bukan di dalam `apps/web/`.
 - **Key design patterns:** Zod validation di API boundary; per-request resource factory (`getDb()`, `getAuthOptions()`) menggantikan pola singleton Node tradisional
 - **Data flow:** client → Next.js Route Handler → validasi zod → Prisma (D1) / OpenRouter → response JSON
 - **Key architectural decisions:**
@@ -95,6 +99,7 @@ project_shape: fullstack
   3. Model AI `:free` dipilih di atas model premium untuk MVP — mencapai target biaya inference $0; trade-off: kualitas output lebih rendah, rate limit 50 request/hari.
   4. Output PRD terstruktur (JSON Fase→Fitur→Sub-fitur) dipilih di atas markdown freeform — lebih actionable buat AI coding agent dan bisa di-render granular per section; berubah dari keputusan awal setelah riset kompetitor.
   5. Resend (HTTP API) dipilih di atas SMTP untuk email transaksional — Cloudflare Workers memblokir outbound SMTP port 25/587 secara default.
+  6. Monorepo (npm workspaces: `apps/web` + `packages/shared` + `packages/cli`) dipilih di atas 2 repo terpisah — shared TypeScript contract (response envelope, struktur PRD) dengan CLI di masa depan mengalahkan overhead 2-repo buat solo developer; `prd.md`/`knowledge.md`/`changelog.md` tetap terpisah per unit (Appendix I tetap berlaku di level dokumen, cuma repo/tooling-nya yang digabung). Trade-off yang diterima: risiko drift antar unit gantinya jadi risiko duplikasi kode dalam satu repo — sudah kejadian sekali (`PrdGenerator.tsx` sempat punya salinan type sendiri, lepas dari `openrouter.ts`) dan langsung ketahuan begitu `packages/shared` dibuat.
 
 ### 4.3 Code Standards
 - **Naming — files:** kebab-case, mengikuti konvensi Next.js App Router (`route.ts`, `page.tsx`)
@@ -421,6 +426,11 @@ Entity: CliToken  [BARU — akibat keputusan auth CLI di §4.4]
 |---|---|---|---|
 | 13 | Berapa hari sebelum penghapusan akun tidak-aktif, email peringatan dikirim? | 30 hari | ✅ RESOLVED |
 
+**Item baru dari sesi restrukturisasi monorepo:**
+| # | Question | Jawaban | Status |
+|---|---|---|---|
+| 14 | Prisma sekarang di major version 8, kita masih pin `^5.20.0` — upgrade sekarang atau nanti? | Belum diputuskan | PENDING — tidak blocking, tapi `prisma generate` di versi 5.x butuh fetch binary engine yang gagal di sandbox (kemungkinan normal di mesin asli); versi 8.x kemungkinan punya dukungan driver-adapter-only yang lebih baik |
+
 ## 11. Revision History
 
 | Version | Date | Author | Changes |
@@ -429,6 +439,7 @@ Entity: CliToken  [BARU — akibat keputusan auth CLI di §4.4]
 | 1.1.0 | 2026-09-16 | Claude (Sonnet 5), atas permintaan Banu | Resolve 8 Open Questions (scale, payment gateway, brand slug, CLI auth, tooling, UU PDP, delete strategy, response envelope); tambah entity `CliToken`; 4 pertanyaan baru muncul (§10 #9-12) |
 | 1.2.0 | 2026-09-17 | Claude (Sonnet 5), atas permintaan Banu | Resolve #9-12 (nama produk MVP, test coverage 80%, retensi data 3 bulan + `User.lastActiveAt`, lokalisasi data di-defer ke konsultasi eksternal); 1 pertanyaan kecil baru muncul (#13) |
 | 1.2.1 | 2026-09-18 | Claude (Sonnet 5), atas permintaan Banu | Resolve #13 (email peringatan 30 hari sebelum hapus akun tidak aktif) — 13/13 open question sudah resolved |
+| 1.3.0 | 2026-09-20 | Claude (Sonnet 5), atas permintaan Banu | Sync dengan restrukturisasi monorepo (npm workspaces): module structure diperbarui, tambah Key Architectural Decision #6 (monorepo vs repo terpisah), versi Next.js dipresisikan (15.5.25), 1 pertanyaan baru (#14, upgrade Prisma 5→8) |
 
 ---
 
