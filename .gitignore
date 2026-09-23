@@ -1,3 +1,8 @@
+#ignore
+.kilo/
+.freebuff/
+.husky/
+
 # Secrets
 .env
 .env.local
