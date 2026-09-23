@@ -1,7 +1,7 @@
 ---
 project: coding-plan
-knowledge_version: 1.0.3
-changelog_version: 1.0.5
+knowledge_version: 1.0.4
+changelog_version: 1.0.6
 created: 2026-09-18
 status: in_progress
 milestone: 1 of 2
@@ -33,22 +33,6 @@ than silently dropped:
 
 ## [IN PROGRESS]
 
-### Task #004 — Structured Logging & Error Tracking Init
-- **Phase:** Foundation
-- **Scope:** Initialize Sentry with PII/secret scrubbing enabled before any event is sent
-- **Files to create / modify:** `apps/web/src/lib/sentry.ts` (new), `apps/web/next.config.mjs` (modify), `apps/web/wrangler.jsonc` (add env var)
-- **Acceptance criteria:**
-  - [ ] Sentry captures an intentionally thrown test error in a non-prod environment
-  - [ ] A test event containing a fake email/token in its payload is scrubbed before send (unit-tested via the `beforeSend` hook)
-- **Dependencies:** none
-- **Decisions made:** (fill after execution — never leave blank)
-
----
-
-## [NEXT TASKS]
-
-### Phase 1 — Foundation
-
 ### Task #005 — Health Check Endpoint
 - **Phase:** Foundation
 - **Scope:** Add `GET /api/health` returning status, D1 connectivity, and app version
@@ -58,6 +42,12 @@ than silently dropped:
   - [ ] Returns 503 with `db: "error"` when the internal D1 check query fails
 - **Dependencies:** none
 - **Decisions made:** (fill after execution — never leave blank)
+
+---
+
+## [NEXT TASKS]
+
+### Phase 1 — Foundation
 
 ### Task #006 — Startup Env Var Validation
 - **Phase:** Foundation
@@ -260,6 +250,41 @@ than silently dropped:
 
 ## [COMPLETED]
 > Changelog v1.0.0 initialized from @knowledge v1.0.0. Shape: fullstack.
+
+### Task #004 — Structured Logging & Error Tracking Init ✅
+- **Completed:** 2026-09-23
+- **Phase:** Foundation
+- **Status:** OK
+- **Branch:** feat/task-004-structured-logging-error-tracking
+- **Files created / modified:**
+  - `apps/web/src/lib/sentry.ts` (new) — single source of truth: `initSentry()` (env-driven, no-DSN no-op, test overrides seam) + `scrubSentryEvent()` (`beforeSend` hook: redacts emails/tokens/values under sensitive keys; depth/array caps; cycle-safe; regexes backtracking-safe per §9)
+  - `apps/web/src/lib/sentry.test.ts` (new) — 13 isolated unit tests: 10 scrubber tests (fake email/token redaction incl. deep request.data + breadcrumbs, sensitive keys, over-scrub guard, cycle/deep/large-array bounds) + 3 e2e tests driving a real SDK client through an in-memory transport (capture → beforeSend → transport), no network
+  - `apps/web/src/instrumentation.ts` (new) — Next 15 instrumentation hook: `register()` init per NEXT_RUNTIME, `onRequestError = Sentry.captureRequestError` for Server Components/route handlers; init failures swallowed (Sentry must never break request flow)
+  - `apps/web/src/sentry.server.config.ts` (new) — nodejs runtime init wrapper
+  - `apps/web/src/sentry.edge.config.ts` (new) — edge runtime init wrapper
+  - `apps/web/src/instrumentation-client.ts` (new) — browser runtime init
+  - `apps/web/next.config.mjs` (modify) — wrapped in `withSentryConfig`; org/project/authToken env-driven only; `silent: true`; uploads gated on SENTRY_AUTH_TOKEN; `disableLogger: true`
+  - `apps/web/wrangler.jsonc` (modify) — `compatibility_date` 2025-01-01 → **2025-08-16** (REQUIRED by Sentry's Next.js-on-Workers support: introduces `https.request` to the runtime); added `vars` block: `SENTRY_DSN: ""` (placeholder until a project exists — empty ⇒ Sentry disabled), `SENTRY_ENVIRONMENT: "development"`
+  - `apps/web/.env.example` (modify) — SENTRY_DSN/SENTRY_ENVIRONMENT/SENTRY_ORG/SENTRY_PROJECT documented; SENTRY_AUTH_TOKEN marked CI-only
+  - `apps/web/package.json` + root `package-lock.json` (modify) — `@sentry/nextjs@10.75.2` exact-pinned
+  - `knowledge.md` (modify) — §2/§3/§8 drift edits (see Knowledge drift), version 1.0.3 → 1.0.4
+- **Acceptance criteria met:**
+  - [x] Sentry captures an intentionally thrown test error in a non-prod environment — verified end-to-end: unit test initializes the real SDK with a fake DSN + in-memory transport, `captureException(new Error("intentional test error"))` → event delivered through the full pipeline (capture → beforeSend → transport.send), asserted on serialized envelope content; runs in CI with zero network
+  - [x] A test event containing a fake email/token in its payload is scrubbed before send (unit-tested via the `beforeSend` hook) — 10 scrubber unit tests against the exact `scrubSentryEvent` wired into every init, plus an e2e test proving `victim@example.com` inside a captured exception message never reaches the transport (replaced with `[Filtered]`)
+- **Security gate:** BASIC — all checks passed (no secrets hardcoded — DSN is an ingestion endpoint ID, not a credential, and is empty-until-set; auth token documented CI-only; no eval/exec; scrubber regexes flat alternation, backtracking-safe per §9 policy). HIGH-RISK OVERRIDE: not applicable — task initializes error tracking, does not implement auth/session/credentials/token logic. FULL-tier item satisfied early: "error tracking scrubs PII/secrets before send" — applied, this is the task's core deliverable
+- **Scalability gate:** BASIC — all checks passed (no sync blocking in request path — init at warmup only; scrubber bounded: depth 6, 50 items/array, cycle-safe; stateless per event; no pools/timeouts introduced)
+- **Regression:** Phase 1 build OK — lint exit 0 (`--max-warnings=0`); `tsc --noEmit` exit 0; `npm test` → 2 files, 16 passed, 0 failed, 1.29s; `next build` exit 0 (5 routes); `opennextjs-cloudflare build` exit 0; `wrangler deploy --dry-run` exit 0 (15,013 KiB / 3,950 KiB gzip)
+- **Decisions made:**
+  - [ARCH] Shared init module (`src/lib/sentry.ts`) + thin per-runtime wrappers instead of 3 independent config files — DSN, sample rates, and the scrubber can never drift between node/edge/browser runtimes; scrubber changes are testable in one place
+  - [PATTERN] PII/secret scrubbing implemented as an explicit `beforeSend` hook (`scrubSentryEvent`) rather than relying on the SDK's built-in key denylist alone — UU PDP compliance is our responsibility, not the SDK's; defense in depth (SDK denylist still active underneath); redacts emails, token-like strings, and values under sensitive keys (password/token/secret/api-key/cookie/session/nik…) before any bytes leave the process
+  - [ARCH] No-DSN ⇒ no-op init: the app runs identically without Sentry credentials — local dev and CI need no account, and an accidentally missing prod var degrades to logs-only instead of erroring; also enables the in-memory-transport e2e tests
+  - [TEST] "Captures an intentionally thrown test error" verified via in-memory transport unit tests instead of a live Sentry project (none exists yet in this environment): drives the REAL SDK client through capture → beforeSend → transport and asserts on the serialized envelope — stronger than a probe (permanent CI regression guard), zero network, zero credentials. Revisit with a real staging-project smoke in Task #019
+  - [INFRA] wrangler `compatibility_date` bumped to 2025-08-16 as part of this task (not deferred to deployment tasks): Sentry's Workers support hard-requires it for `https.request`; shipping the SDK without it would deploy a worker that cannot send any events
+  - [INFRA] DSN + environment live in wrangler `vars` (non-secret), not `wrangler secret put` — a DSN is a public ingestion endpoint ID; secrets remain reserved for real credentials (NEXTAUTH_SECRET, API keys)
+  - [API] `initSentry(overrides?)` test seam: overrides (dsn/transport) are applied last and never used by production callers — keeps production wiring env-driven while letting tests inject a fake DSN and in-memory transport
+  - [TEST] Envelope item body asserted via `item[1].body` (SDK v10 Envelope = [header, items], item = [header, body]) — verified empirically against the installed SDK, not guessed
+- **Notes:** Deviation from the task's file list (documented, additive): instrumentation hook + per-runtime config files + .env.example + lockfile were required by the SDK's actual architecture (the task's 3-file list assumed a single-init setup, which @sentry/nextjs v10 does not support — it mandates the instrumentation entrypoint). `SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` unset until a Sentry project is created (Task #019 staging verification will confirm a real event lands in a live project). Bundle size grew ~1.4 MB raw (3949→3950 KiB gzip ≈ neutral — Sentry's client+server chunks compress well) — acceptable, no worker size limit hit at dry-run. Pre-existing `npm audit` findings (moderate:4/high:6/critical:2, Task #003) unchanged in count by the Sentry addition; triage still deferred to Phase 4/6
+- **Knowledge drift:** UPDATE REQUIRED: @knowledge §2 — added @sentry/nextjs@10.75.2, error-tracking entry, compatibility_date 2025-08-16 note, wrangler vars pattern; §3 — added instrumentation/sentry config files to folder structure; §8 — required env vars extended (SENTRY_*), observability updated from "direkomendasikan (belum diimplementasi)" to implemented — all applied THIS task, knowledge_version bumped 1.0.3 → 1.0.4 (synced in frontmatter)
 
 ### Task #003 — CI Pipeline (lint → type-check → test → security-scan) ✅
 - **Completed:** 2026-09-23
