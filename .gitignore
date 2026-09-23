@@ -20,6 +20,7 @@ dist/
 next-env.d.ts
 worker-configuration.d.ts
 *.tsbuildinfo
+src/generated/
 
 # Test coverage
 coverage/

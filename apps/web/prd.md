@@ -1,6 +1,6 @@
 ---
 doc_id: PRD-CODING-PLAN-001
-version: 1.3.0
+version: 1.3.1
 status: draft
 created: 2026-09-16
 flow_compatibility: vibe-coding-v1.7
@@ -429,7 +429,7 @@ Entity: CliToken  [BARU — akibat keputusan auth CLI di §4.4]
 **Item baru dari sesi restrukturisasi monorepo:**
 | # | Question | Jawaban | Status |
 |---|---|---|---|
-| 14 | Prisma sekarang di major version 8, kita masih pin `^5.20.0` — upgrade sekarang atau nanti? | Belum diputuskan | PENDING — tidak blocking, tapi `prisma generate` di versi 5.x butuh fetch binary engine yang gagal di sandbox (kemungkinan normal di mesin asli); versi 8.x kemungkinan punya dukungan driver-adapter-only yang lebih baik |
+| 14 | Prisma sekarang di major version 8, kita masih pin `^5.20.0` — upgrade sekarang atau nanti? | **Upgrade sekarang — tapi ke 7.10.0, bukan 8.x.** 8.x ternyata masih release candidate (`8.0.0-rc.15`), dan `@prisma/adapter-d1` belum di-publish untuk 8.x sama sekali — cuma ada sampai 7.10.0. Upgrade sekalian ke generator baru (`provider = "prisma-client"`, `output` custom, `engineType = "client"` — no Rust binary, cocok buat Workers). **Belum terverifikasi end-to-end** — `prisma generate` nggak bisa selesai di sandbox saya (network allowlist), perlu dikonfirmasi di mesin kamu | ✅ RESOLVED (dengan catatan verifikasi) |
 
 ## 11. Revision History
 
@@ -440,6 +440,7 @@ Entity: CliToken  [BARU — akibat keputusan auth CLI di §4.4]
 | 1.2.0 | 2026-09-17 | Claude (Sonnet 5), atas permintaan Banu | Resolve #9-12 (nama produk MVP, test coverage 80%, retensi data 3 bulan + `User.lastActiveAt`, lokalisasi data di-defer ke konsultasi eksternal); 1 pertanyaan kecil baru muncul (#13) |
 | 1.2.1 | 2026-09-18 | Claude (Sonnet 5), atas permintaan Banu | Resolve #13 (email peringatan 30 hari sebelum hapus akun tidak aktif) — 13/13 open question sudah resolved |
 | 1.3.0 | 2026-09-20 | Claude (Sonnet 5), atas permintaan Banu | Sync dengan restrukturisasi monorepo (npm workspaces): module structure diperbarui, tambah Key Architectural Decision #6 (monorepo vs repo terpisah), versi Next.js dipresisikan (15.5.25), 1 pertanyaan baru (#14, upgrade Prisma 5→8) |
+| 1.3.1 | 2026-09-23 | Claude (Sonnet 5), atas permintaan Banu | Resolve #14 — upgrade Prisma ke 7.10.0 (bukan 8.x, masih RC), generator baru (`prisma-client` + `engineType: "client"`); tambah Key Architectural Decision #7. Belum terverifikasi end-to-end — lihat knowledge.md §2 |
 
 ---
 

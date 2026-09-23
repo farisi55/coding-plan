@@ -1,11 +1,22 @@
 generator client {
-  provider        = "prisma-client-js"
+  // prisma-client-js is deprecated as of Prisma 7 — prisma-client is now the
+  // default generator, GA since 6.16.0. output is REQUIRED as of Prisma 7
+  // (no longer defaults into node_modules). engineType = "client" means no
+  // Rust query-engine binary is downloaded or shipped at all — smaller
+  // bundle, no binary to fetch, exactly what a Workers deployment wants.
+  // Requires a driver adapter, which we already use (@prisma/adapter-d1).
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
   previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  // url intentionally omitted here — Prisma 7 deprecates datasource url/
+  // directUrl/shadowDatabaseUrl in schema.prisma in favor of prisma.config.ts.
+  // Moot for us either way: runtime never reads this, D1 is a binding
+  // (see src/lib/db.ts), not a connection string.
 }
 
 // NOTE: SQLite/D1 has no native enum type in Prisma — these are plain

@@ -1,6 +1,6 @@
 ---
 project: coding-plan
-version: 1.0.2
+version: 1.0.3
 source: prd
 last_updated: 2026-09-18
 project_shape: fullstack
@@ -19,7 +19,7 @@ external_assets: false
 ## 2. Tech Stack
 - **Language:** TypeScript 5.x, runtime Node.js via Cloudflare Workers `nodejs_compat`
 - **Framework:** Next.js 15.5.25, App Router (bumped from 15.1.6 — `@opennextjs/cloudflare@1.x` requires `>=15.5.24`)
-- **Database:** Cloudflare D1 (SQLite) via Prisma `@prisma/adapter-d1` (`previewFeatures = ["driverAdapters"]`)
+- **Database:** Cloudflare D1 (SQLite) via Prisma 7.10.0 (upgraded from 5.20.0 — `@prisma/adapter-d1` doesn't exist for the 8.x RC yet, so 7.10.0 is the current stable ceiling). Generator changed to `provider = "prisma-client"` with `output = "../src/generated/prisma"` (required as of v7 — no longer generates into `node_modules`) and `engineType = "client"` (no Rust query-engine binary at all — GA since 6.16.0, the right call for a Workers deployment). Import path changed accordingly: `from "../generated/prisma/client"`, not `from "@prisma/client"`. Datasource `url` moved out of `schema.prisma` into `prisma.config.ts` (deprecated in-schema as of v7); still just a placeholder either way since runtime never reads it. **Not verified end-to-end** — `prisma generate` cannot complete in this sandbox (blocked fetching its schema-engine binary from `binaries.prisma.sh`, outside the network allowlist); syntax is research-backed but unconfirmed. Run `npm install && npx prisma generate` on a real machine before trusting this.
 - **Infrastructure:** Cloudflare Workers via `@opennextjs/cloudflare@^1.0.0` (bumped from a broken `^0.6.0` pin — see Task #001 Notes) + `wrangler@^4.125.0` (bumped from `^3.99.0`, required peer dependency)
 - **Container orchestration:** none
 - **Key third-party services:** OpenRouter (AI gateway, model `:free`), Cloudflare Vectorize + Workers AI (RAG Workspace Agent chat — belum diimplementasi), Resend (email, HTTP API), Xendit (payment gateway — belum diimplementasi)
@@ -57,6 +57,7 @@ external_assets: false
   4. Output PRD terstruktur (JSON Fase→Fitur→Sub-fitur) dipilih di atas markdown freeform — lebih actionable buat AI coding agent
   5. Resend (HTTP API) dipilih di atas SMTP — Cloudflare Workers memblokir outbound SMTP port 25/587 by default
   6. Monorepo (npm workspaces: apps/web + packages/shared + packages/cli) dipilih di atas 2 repo terpisah — shared TypeScript contract (response envelope, PRD structure) dengan CLI di masa depan mengalahkan overhead 2-repo buat solo developer; per-unit `prd.md`/`knowledge.md`/`changelog.md` tetap terpisah (Appendix I tetap berlaku di level dokumen, cuma tooling/repo-nya yang digabung)
+  7. Prisma `engineType = "client"` (no Rust binary) dipilih di atas default engine — cocok buat Workers (bundle lebih kecil, nggak ada binary native yang perlu di-fetch/ship saat runtime); trade-off: CLI (`prisma generate`) tetap butuh schema-engine buat operasinya sendiri, jadi ini nggak menghilangkan kebutuhan network access saat development, cuma menghilangkan binary dari RUNTIME bundle
 
 ## 4. Code Standards
 - **Naming:** file kebab-case, function camelCase, class/type PascalCase

@@ -1,7 +1,7 @@
 ---
 project: coding-plan
-knowledge_version: 1.0.2
-changelog_version: 1.0.2
+knowledge_version: 1.0.3
+changelog_version: 1.0.3
 created: 2026-09-18
 status: in_progress
 milestone: 1 of 2
@@ -94,7 +94,7 @@ than silently dropped:
 
 ### Task #007 — Apply & Verify Initial D1 Migration
 - **Phase:** Domain & Data
-- **Scope:** Generate and apply the first D1 migration for all 7 entities (User, Account, Session, VerificationToken, Project, Prd, CliToken)
+- **Scope:** Generate and apply the first D1 migration for all 7 entities (User, Account, Session, VerificationToken, Project, Prd, CliToken). **Note:** requires `npx prisma generate` to succeed first — unverified as of the Prisma 7 upgrade (sandbox network limitation, see knowledge.md §2); confirm this works before starting this task
 - **Files to create / modify:** `apps/web/migrations/0001_init.sql` (new)
 - **Acceptance criteria:**
   - [ ] `npm run prisma:migrate` applies cleanly to a fresh local D1 instance with zero errors
