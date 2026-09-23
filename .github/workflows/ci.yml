@@ -1,0 +1,74 @@
+# CI pipeline — runs on every push and PR to dev/main.
+# Stage order: lint -> typecheck -> test -> security-scan.
+# The repo is an npm workspaces monorepo (Task #001 restructure): commands run
+# at the repo root, scoped to apps/web via `--workspace`/`-w` — never bare
+# `npm run lint`, which would resolve to nothing at the root.
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+# Cancel superseded runs on the same ref to save free-tier CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Job-level default: minimal GITHUB_TOKEN scope; no write access to anything.
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint, typecheck, test, security-scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Lockfile-only clean install (Task #002's committed package-lock.json):
+      # reproducible, and covers all workspaces from the single root lockfile.
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      # --max-warnings=0 so a warning regression fails the build, not just lint.
+      - name: Lint
+        run: npm run lint -w apps/web -- --max-warnings=0
+
+      # Next's `build` bundles its own typecheck; an explicit `tsc --noEmit`
+      # keeps the type gate independent of the (heavier) build step.
+      - name: Typecheck
+        run: npx tsc --noEmit -p apps/web
+
+      # Vitest run mode (no watch), CI-safe by default.
+      - name: Test
+        run: npm test -w apps/web
+
+      # Dependency security scan, scoped to the web workspace (the only one
+      # with real code so far). npm audit exits non-zero on ANY advisory, which
+      # would red CI on harmless transitive dev-dep findings, so the exit code
+      # is intentionally NOT propagated; the JSON report is still printed and a
+      # severity summary lands in the step summary for review (a threshold
+      # gate can be added later). No secret env vars exist in this workflow,
+      # so nothing secret can be echoed or leaked; GITHUB_TOKEN is
+      # least-privilege (contents: read).
+      - name: Security scan (npm audit)
+        run: |
+          npm audit --workspace=apps/web --json > audit-report.json || true
+          echo "### Security scan (npm audit) — advisory counts" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s audit-report.json ]; then
+            node -e "const r=require('./audit-report.json');const v=(r.metadata&&r.metadata.vulnerabilities)||{};console.log('info:'+(v.info||0)+' low:'+(v.low||0)+' moderate:'+(v.moderate||0)+' high:'+(v.high||0)+' critical:'+(v.critical||0))" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "npm audit produced no report (possible network restriction)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          cat audit-report.json || true

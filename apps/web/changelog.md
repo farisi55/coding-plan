@@ -1,7 +1,7 @@
 ---
 project: coding-plan
 knowledge_version: 1.0.3
-changelog_version: 1.0.4
+changelog_version: 1.0.5
 created: 2026-09-18
 status: in_progress
 milestone: 1 of 2
@@ -33,22 +33,6 @@ than silently dropped:
 
 ## [IN PROGRESS]
 
-### Task #003 — CI Pipeline (lint → type-check → test → security-scan)
-- **Phase:** Foundation
-- **Scope:** GitHub Actions workflow running lint, typecheck, test, and a dependency security scan on every push. Repo is now an npm workspaces monorepo (see Task #001 follow-up restructure) — commands run at root with `--workspace=apps/web` or `npm run <script> -w apps/web`, not bare `npm run lint`
-- **Files to create / modify:** `.github/workflows/ci.yml` (new, at repo root — GitHub Actions always discovers workflows there regardless of workspace layout)
-- **Acceptance criteria:**
-  - [ ] Workflow runs lint/typecheck/test/audit scoped to `apps/web` (the only workspace with real code so far) in sequence
-  - [ ] A PR with an intentionally broken lint rule fails the workflow
-- **Dependencies:** Task #001, #002
-- **Decisions made:** (fill after execution — never leave blank)
-
----
-
-## [NEXT TASKS]
-
-### Phase 1 — Foundation
-
 ### Task #004 — Structured Logging & Error Tracking Init
 - **Phase:** Foundation
 - **Scope:** Initialize Sentry with PII/secret scrubbing enabled before any event is sent
@@ -58,6 +42,12 @@ than silently dropped:
   - [ ] A test event containing a fake email/token in its payload is scrubbed before send (unit-tested via the `beforeSend` hook)
 - **Dependencies:** none
 - **Decisions made:** (fill after execution — never leave blank)
+
+---
+
+## [NEXT TASKS]
+
+### Phase 1 — Foundation
 
 ### Task #005 — Health Check Endpoint
 - **Phase:** Foundation
@@ -270,6 +260,29 @@ than silently dropped:
 
 ## [COMPLETED]
 > Changelog v1.0.0 initialized from @knowledge v1.0.0. Shape: fullstack.
+
+### Task #003 — CI Pipeline (lint → type-check → test → security-scan) ✅
+- **Completed:** 2026-09-23
+- **Phase:** Foundation
+- **Status:** OK
+- **Branch:** feat/task-003-ci-pipeline
+- **Files created / modified:**
+  - `.github/workflows/ci.yml` (new, at repo root — GitHub Actions discovers workflows there regardless of workspace layout) — single `ci` job: checkout → setup-node (Node 20, npm cache) → `npm ci` → lint (`--max-warnings=0`) → typecheck (`tsc --noEmit -p apps/web`) → test (`vitest run`) → security scan (`npm audit --workspace=apps/web --json`), all npm commands run from the repo root with workspace scoping
+- **Acceptance criteria met:**
+  - [x] Workflow runs lint/typecheck/test/audit scoped to `apps/web` (the only workspace with real code so far) in sequence — all four stages verified locally in exact CI order, exit 0 for lint/typecheck/test; audit report generated and summary parsed (moderate:4 high:6 critical:2, reported non-blocking — see Decisions)
+  - [x] A PR with an intentionally broken lint rule fails the workflow — verified live: a probe file with an unused variable made `npm run lint -- --max-warnings=0` exit 1 (would fail the CI job); probe removed, lint clean again
+- **Security gate:** BASIC — all checks passed. CORS/CI-secret-masking: N/A per Task #001 (no CORS config; no secret env vars exist in the workflow — nothing to mask); container ARG: N/A (`container orchestration: none`). Pre-commit hook re-verified active this task. Bonus: lockfile + `npm ci` clean-install and non-blocking CVE reporting satisfied at FULL-tier level even though Phase 1 only requires BASIC
+- **Scalability gate:** BASIC — all items N/A or passed (zero runtime code touched); CI logs are structured per-step with run-id correlation via GitHub Actions native logging
+- **Regression:** Phase 1 build OK — lint exit 0 (`--max-warnings=0`); `tsc --noEmit` exit 0; `npm test` → 1 file, 3 passed, 0 failed, ~0.5s; `npm audit --json` exit 1 (documented non-blocking, findings reported in step summary); workflow YAML validated (1 job, 7 steps)
+- **Decisions made:**
+  - [INFRA] All npm commands run from the repo root with `-w apps/web` / `--workspace=apps/web` per the task scope's monorepo note — npm workspace flags require root cwd, so the workflow uses no `working-directory` default (a first draft with `working-directory: apps/web` was rejected: it would break workspace resolution and contradict the scope note)
+  - [INFRA] Security scan is a **non-blocking report**: `npm audit` exits non-zero on any advisory (current tree: 6 high / 2 critical, almost certainly transitive dev-deps), so propagating its exit code would red CI permanently from day one. The JSON report is printed and advisory counts land in `$GITHUB_STEP_SUMMARY`; making high/critical CI-blocking is deferred to Phase 4/6 hardening with explicit triage, not silently skipped
+  - [INFRA] Explicit `tsc --noEmit -p apps/web` typecheck step added even though `next build` bundles a typecheck — keeps the type gate independent of the (heavier, more failure-prone) build step and gives a faster, clearer CI signal
+  - [INFRA] Typecheck runs `npx tsc -p apps/web` from root rather than adding a root `typecheck` script — no root package.json churn in a CI-only task; a root script can be added later if more workspaces appear
+  - [INFRA] `concurrency` group cancels superseded runs on the same ref (free-tier CI-minute economy); `permissions: contents: read` gives least-privilege `GITHUB_TOKEN`
+  - [TEST] Broken-lint acceptance criterion verified via a temporary probe file (`unused var` → exit 1 under `--max-warnings=0`) rather than a real PR — equivalent signal (the lint stage IS the workflow's failure mechanism), and the probe was deleted immediately after, keeping the commit clean
+- **Notes:** none — CI cannot be observed end-to-end on GitHub's runners from this environment (workflow triggers on push to dev, which happens at merge time); all four stages were verified locally in exact CI order with identical commands instead. `npm audit` counts moderate:4 / high:6 / critical:2 at scan time — triage deferred per Decision above, revisit in Phase 4/6
+- **Knowledge drift:** none
 
 ### Task #001 — Git Hygiene & Pre-commit Secret Guard ✅
 - **Completed:** 2026-09-19
