@@ -1,7 +1,7 @@
 ---
 project: coding-plan
 knowledge_version: 1.0.3
-changelog_version: 1.0.3
+changelog_version: 1.0.4
 created: 2026-09-18
 status: in_progress
 milestone: 1 of 2
@@ -33,22 +33,6 @@ than silently dropped:
 
 ## [IN PROGRESS]
 
-### Task #002 — Commit Dependency Lockfile
-- **Phase:** Foundation
-- **Scope:** Run `npm install` to generate and commit `package-lock.json` for reproducible installs
-- **Files to create / modify:** `package-lock.json` (new)
-- **Acceptance criteria:**
-  - [ ] `package-lock.json` exists and is committed
-  - [ ] `npm ci` on a clean checkout completes with zero errors
-- **Dependencies:** none
-- **Decisions made:** (fill after execution — never leave blank)
-
----
-
-## [NEXT TASKS]
-
-### Phase 1 — Foundation
-
 ### Task #003 — CI Pipeline (lint → type-check → test → security-scan)
 - **Phase:** Foundation
 - **Scope:** GitHub Actions workflow running lint, typecheck, test, and a dependency security scan on every push. Repo is now an npm workspaces monorepo (see Task #001 follow-up restructure) — commands run at root with `--workspace=apps/web` or `npm run <script> -w apps/web`, not bare `npm run lint`
@@ -58,6 +42,12 @@ than silently dropped:
   - [ ] A PR with an intentionally broken lint rule fails the workflow
 - **Dependencies:** Task #001, #002
 - **Decisions made:** (fill after execution — never leave blank)
+
+---
+
+## [NEXT TASKS]
+
+### Phase 1 — Foundation
 
 ### Task #004 — Structured Logging & Error Tracking Init
 - **Phase:** Foundation
@@ -301,3 +291,23 @@ than silently dropped:
   - [ARCH] Initialized git with `main` (stable) + `dev` (integration) branches per the project's git strategy, before branching `feat/task-001-...` off `dev`
 - **Notes:** **`npm install` is currently broken for the whole project.** `@opennextjs/cloudflare@^0.6.0` (pinned in `package.json`) hardcodes a dependency on `https://pkg.pr.new/@opennextjs/aws@798` — a prerelease-build host outside this environment's network allowlist. Separately and more importantly: that package has moved fast — `^0.6.0` is now many versions behind current latest (`1.20.6`), and `^0.6.0` would never auto-upgrade past `0.x` under semver even where the install succeeds. **This blocks Task #002 (lockfile) until resolved** — recommend re-pinning to a current `1.x` version as the first action of Task #002, not deferring further.
 - **Knowledge drift:** UPDATE REQUIRED: @knowledge §3 — added `.husky/pre-commit` to the folder structure (new top-level `.husky/` folder); already applied, `knowledge_version` bumped to 1.0.1
+
+### Task #002 — Commit Dependency Lockfile ✅
+- **Completed:** 2026-09-23
+- **Phase:** Foundation
+- **Status:** OK
+- **Branch:** feat/task-002-commit-dependency-lockfile
+- **Files created / modified:**
+  - `package-lock.json` (repo root) — verified present, tracked, in sync (regenerated/confirmed by `npm install`; lockfileVersion 3, 555 KB, 879 packages)
+  - `apps/web/eslint.config.mjs` — added ignores for generated/build artifacts (`.next/`, `.open-next/`, `src/generated/`, `next-env.d.ts`, `coverage/`) so `npm run lint` reflects real source only
+- **Acceptance criteria met:**
+  - [x] `package-lock.json` exists and is committed
+  - [x] `npm ci` on a clean checkout completes with zero errors (added 879 packages in 5m, exit 0)
+- **Security gate:** BASIC — all checks passed (CORS/CI-secret/container items N/A; pre-commit `.env` block re-tested live: blocked with exit 1)
+- **Scalability gate:** BASIC — all items N/A, task touches no runtime code
+- **Regression:** Phase 1 build OK — `npm run build` exit 0; `npm run lint` exit 0 (0 errors after ignore fix); `npm test` → 1 file, 3 passed, 0 failed, 900ms
+- **Decisions made:**
+  - [INFRA] ESLint ignores extended to gitignored build/generated trees instead of linting `.next/` output — the prior 183 "errors" were 100% artifacts (`.next/`, `src/generated/`, `next-env.d.ts`), zero in real source; CI (Task #003) would have failed permanently otherwise
+  - [INFRA] Lockfile kept at monorepo root (npm workspaces single lockfile) — one `npm ci` covers all workspaces; no per-workspace lockfiles
+- **Notes:** none — Task #001's `@opennextjs/cloudflare@^0.6.0` blocker already resolved by the `^1.x` bump recorded in @knowledge §2; `npm install`/`npm ci` both succeed. npm warns that 7 packages have unapproved install scripts (prisma/esbuild/workerd) — benign, scripts not required for lint/build/test; revisit if `prisma generate` needs `@prisma/engines` postinstall (known sandbox limitation, @knowledge §2)
+- **Knowledge drift:** none
