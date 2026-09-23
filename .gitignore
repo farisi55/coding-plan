@@ -2,6 +2,7 @@
 .kilo/
 .freebuff/
 .husky/
+.freebuff/
 
 # Secrets
 .env
