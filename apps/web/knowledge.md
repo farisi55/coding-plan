@@ -1,8 +1,8 @@
 ---
 project: coding-plan
-version: 1.0.3
+version: 1.0.4
 source: prd
-last_updated: 2026-09-18
+last_updated: 2026-09-23
 project_shape: fullstack
 simple_mode: false
 external_assets: false
@@ -20,9 +20,10 @@ external_assets: false
 - **Language:** TypeScript 5.x, runtime Node.js via Cloudflare Workers `nodejs_compat`
 - **Framework:** Next.js 15.5.25, App Router (bumped from 15.1.6 — `@opennextjs/cloudflare@1.x` requires `>=15.5.24`)
 - **Database:** Cloudflare D1 (SQLite) via Prisma 7.10.0 (upgraded from 5.20.0 — `@prisma/adapter-d1` doesn't exist for the 8.x RC yet, so 7.10.0 is the current stable ceiling). Generator changed to `provider = "prisma-client"` with `output = "../src/generated/prisma"` (required as of v7 — no longer generates into `node_modules`) and `engineType = "client"` (no Rust query-engine binary at all — GA since 6.16.0, the right call for a Workers deployment). Import path changed accordingly: `from "../generated/prisma/client"`, not `from "@prisma/client"`. Datasource `url` moved out of `schema.prisma` into `prisma.config.ts` (deprecated in-schema as of v7); still just a placeholder either way since runtime never reads it. **Not verified end-to-end** — `prisma generate` cannot complete in this sandbox (blocked fetching its schema-engine binary from `binaries.prisma.sh`, outside the network allowlist); syntax is research-backed but unconfirmed. Run `npm install && npx prisma generate` on a real machine before trusting this.
-- **Infrastructure:** Cloudflare Workers via `@opennextjs/cloudflare@^1.0.0` (bumped from a broken `^0.6.0` pin — see Task #001 Notes) + `wrangler@^4.125.0` (bumped from `^3.99.0`, required peer dependency)
+- **Infrastructure:** Cloudflare Workers via `@opennextjs/cloudflare@^1.0.0` (bumped from a broken `^0.6.0` pin — see Task #001 Notes) + `wrangler@^4.125.0` (bumped from `^3.99.0`, required peer dependency). Workers `compatibility_date` = `2025-08-16` (bumped from `2025-01-01` in Task #004 — REQUIRED by Sentry's Next.js-on-Workers support: introduces `https.request` to the runtime, which Sentry needs to send events; do not lower). `wrangler.jsonc` `vars` carries non-secret runtime config (`SENTRY_DSN`, `SENTRY_ENVIRONMENT`); secrets stay in `wrangler secret put` / dashboard.
+- **Error tracking:** Sentry via `@sentry/nextjs@10.75.2` (exact-pinned; initialized in Task #004). Runtime-init pattern for OpenNext Workers (officially supported, requires the 2025-08-16 compatibility date): shared init + PII/secret scrubber in `src/lib/sentry.ts` (`initSentry()`, `scrubSentryEvent()` via `beforeSend`), wired per runtime by `src/instrumentation.ts` (`register()` + `onRequestError` → `sentry.server.config.ts` / `sentry.edge.config.ts` / `instrumentation-client.ts`), `next.config.mjs` wrapped in `withSentryConfig` (org/project/authToken all env-driven; `silent: true`; sourcemap uploads only when `SENTRY_AUTH_TOKEN` present). No-DSN ⇒ no-op init (dev/CI unaffected). Captures verified via in-memory transport in unit tests (no live Sentry project needed).
 - **Container orchestration:** none
-- **Key third-party services:** OpenRouter (AI gateway, model `:free`), Cloudflare Vectorize + Workers AI (RAG Workspace Agent chat — belum diimplementasi), Resend (email, HTTP API), Xendit (payment gateway — belum diimplementasi)
+- **Key third-party services:** OpenRouter (AI gateway, model `:free`), Cloudflare Vectorize + Workers AI (RAG Workspace Agent chat — belum diimplementasi), Resend (email, HTTP API), Sentry (error tracking — diimplementasi Task #004), Xendit (payment gateway — belum diimplementasi)
 - **Webhook providers:** Xendit (konfirmasi pembayaran) — belum diimplementasi
 
 ## 3. Architecture
@@ -39,7 +40,11 @@ external_assets: false
   │   │   │   ├── api/{auth/[...nextauth],generate}/route.ts
   │   │   │   ├── layout.tsx, page.tsx, globals.css
   │   │   ├── components/PrdGenerator.tsx
-  │   │   └── lib/{auth,db,openrouter,api-response}.ts
+  │   │   ├── instrumentation.ts           # Next instrumentation hook: per-runtime Sentry init + onRequestError
+  │   │   ├── instrumentation-client.ts     # client runtime Sentry init
+  │   │   ├── sentry.server.config.ts       # nodejs runtime Sentry init
+  │   │   ├── sentry.edge.config.ts         # edge runtime Sentry init
+  │   │   └── lib/{auth,db,openrouter,api-response,sentry}.ts
   │   ├── cloudflare-env.d.ts      # bridges wrangler's generated Env into CloudflareEnv
   │   ├── wrangler.jsonc, open-next.config.ts, next.config.mjs
   │   └── prd.md, knowledge.md, changelog.md   # this unit's own planning docs
@@ -175,9 +180,9 @@ Entity: CliToken
 - Multi-table atomic transactions: **tidak dipakai secara sengaja** — D1 tidak dukung transaction asli; `/api/generate` didesain sequential (create project → generate → create Prd → update status → update quota), toleran partial-failure
 
 ## 8. Environment & Configuration
-- **Required env vars:** `DATABASE_URL` (placeholder, tidak dipakai runtime — D1 adalah binding bukan connection string), `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `OPENROUTER_API_KEY`, `NEXT_PUBLIC_APP_URL`
+- **Required env vars:** `DATABASE_URL` (placeholder, tidak dipakai runtime — D1 adalah binding bukan connection string), `NEXTAUTH_URL`, `NEXTAUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `OPENROUTER_API_KEY`, `NEXT_PUBLIC_APP_URL`, plus Task #004 additions: `SENTRY_DSN` (optional, non-secret — unset/empty ⇒ Sentry disabled; set in wrangler `vars` or dashboard), `SENTRY_ENVIRONMENT` (optional, default NODE_ENV), `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` (CI-only, sourcemap uploads — token is a real secret, never commit)
 - **Feature flags:** none
-- **Observability:** log bawaan Cloudflare Workers (`observability.enabled` di wrangler config); error tracking Sentry direkomendasikan (belum diimplementasi); metrics dan alerting channel spesifik belum diputuskan
+- **Observability:** log bawaan Cloudflare Workers (`observability.enabled` di wrangler config); error tracking **Sentry — diimplementasi Task #004** (`@sentry/nextjs`, beforeSend PII/secret scrubbing wajib per UU PDP, no-DSN no-op); metrics dan alerting channel spesifik belum diputuskan
 - **Build/deploy:** `npm run cf:deploy` (`opennextjs-cloudflare build` + `deploy`)
 - **Multi-environment:** dev / production (belum ada staging eksplisit)
 - **Backup:** D1 Time Travel — bawaan, otomatis, gratis; restore ke menit manapun dalam 30 hari terakhir

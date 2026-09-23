@@ -25,6 +25,7 @@
     "@next-auth/prisma-adapter": "^1.0.7",
     "@prisma/adapter-d1": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@sentry/nextjs": "10.75.2",
     "dotenv": "^16.4.7",
     "next": "15.5.25",
     "next-auth": "^4.24.8",

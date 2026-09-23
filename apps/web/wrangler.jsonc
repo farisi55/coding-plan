@@ -2,7 +2,10 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "prd-generator",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2025-01-01",
+  // 2025-08-16+ is REQUIRED by the Sentry SDK's Next.js-on-Workers support:
+  // it introduces https.request to the Workers runtime, which Sentry needs
+  // to send events. Do not lower this date.
+  "compatibility_date": "2025-08-16",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": ".open-next/assets",
@@ -17,5 +20,14 @@
   ],
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    // Non-secret runtime config. SENTRY_DSN is safe to inline here — a DSN
+    // is an ingestion endpoint ID, not a credential. Secrets (NEXTAUTH_SECRET,
+    // API keys) stay in `wrangler secret put` / the Cloudflare dashboard.
+    // Set SENTRY_DSN to "" while no Sentry project exists yet; initSentry()
+    // treats an empty/unset DSN as "error tracking disabled" (no-op init).
+    "SENTRY_DSN": "",
+    "SENTRY_ENVIRONMENT": "development"
   }
 }
